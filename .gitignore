@@ -1,0 +1,27 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.*.local
+*.log
+coverage/
+.nyc_output/
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+*.joblib
+models/registry/versions/*.joblib
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Docker
+.docker/

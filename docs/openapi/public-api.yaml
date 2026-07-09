@@ -1,0 +1,212 @@
+openapi: 3.0.3
+info:
+  title: PredixRoute Public API
+  version: 1.0.0
+  description: AI-Powered Logistics Intelligence Platform — Public API
+  contact:
+    name: PredixRoute Support
+    email: support@predixroute.com
+
+servers:
+  - url: https://api.predixroute.com/api/v1
+    description: Production
+  - url: http://localhost:3000/api/v1
+    description: Development
+
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    RiskEvaluateRequest:
+      type: object
+      required:
+        - destinationPincode
+        - weightGrams
+        - cod
+        - orderValue
+        - addressQualityScore
+        - availableCouriers
+      properties:
+        destinationPincode:
+          type: string
+          pattern: '^\d{6}$'
+          example: '110001'
+        weightGrams:
+          type: integer
+          minimum: 1
+          maximum: 50000
+          example: 500
+        cod:
+          type: boolean
+          example: true
+        codAmount:
+          type: number
+          nullable: true
+          example: 1499.00
+        orderValue:
+          type: number
+          minimum: 0
+          example: 1499.00
+        addressQualityScore:
+          type: number
+          minimum: 0
+          maximum: 1
+          example: 0.72
+        availableCouriers:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 20
+          example: ['delhivery', 'bluedart', 'dtdc']
+        externalRef:
+          type: string
+          maxLength: 100
+
+    RiskEvaluateResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            predictionId:
+              type: string
+            deliveryProbability:
+              type: number
+            riskScore:
+              type: number
+            riskLevel:
+              type: string
+              enum: [LOW, MEDIUM, HIGH, CRITICAL]
+            recommendedCourier:
+              type: string
+            explanations:
+              type: array
+              items:
+                type: object
+                properties:
+                  feature:
+                    type: string
+                  value: {}
+                  impact:
+                    type: number
+                  direction:
+                    type: string
+                    enum: [INCREASES_RISK, DECREASES_RISK]
+                  description:
+                    type: string
+            modelVersion:
+              type: string
+            evaluatedAt:
+              type: string
+              format: date-time
+        requestId:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+        requestId:
+          type: string
+
+paths:
+  /public/risk/evaluate:
+    post:
+      summary: Evaluate shipment delivery risk
+      tags: [Risk]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskEvaluateRequest'
+      responses:
+        '200':
+          description: Risk evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskEvaluateResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+
+  /public/recommendation:
+    post:
+      summary: Get courier recommendation
+      tags: [Recommendation]
+      responses:
+        '200':
+          description: Courier ranking result
+
+  /public/batch/evaluate:
+    post:
+      summary: Batch evaluate multiple shipments
+      tags: [Batch]
+      responses:
+        '200':
+          description: Batch evaluation results
+
+  /public/pincode/{pincode}:
+    get:
+      summary: Get pincode intelligence
+      tags: [Pincode]
+      parameters:
+        - name: pincode
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{6}$'
+      responses:
+        '200':
+          description: Pincode performance data
+
+  /public/courier/{courier}:
+    get:
+      summary: Get courier intelligence
+      tags: [Courier]
+      parameters:
+        - name: courier
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Courier performance data
+
+  /public/health:
+    get:
+      summary: Health check
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: Service health status
