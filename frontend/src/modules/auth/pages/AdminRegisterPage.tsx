@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { Alert, Button, Link, Stack, TextField } from '@mui/material';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { PasswordField } from '../../../components/PasswordField';
 import { authService } from '../../../services/authService';
 import { paths } from '../../../routes/paths';
@@ -49,17 +50,44 @@ export function AdminRegisterPage() {
   return (
     <form onSubmit={handleSubmit}>
       <Stack spacing={2}>
-        {error && <Alert severity="error">{error}</Alert>}
-        {success && <Alert severity="success">{success}</Alert>}
-        <TextField label="First Name" value={form.firstName} onChange={update('firstName')} required fullWidth InputLabelProps={{ sx: { color: 'grey.400' } }} sx={{ '& .MuiOutlinedInput-root': { color: 'grey.100' } }} />
-        <TextField label="Last Name" value={form.lastName} onChange={update('lastName')} required fullWidth InputLabelProps={{ sx: { color: 'grey.400' } }} sx={{ '& .MuiOutlinedInput-root': { color: 'grey.100' } }} />
-        <TextField label="Admin Email" type="email" value={form.email} onChange={update('email')} required fullWidth InputLabelProps={{ sx: { color: 'grey.400' } }} sx={{ '& .MuiOutlinedInput-root': { color: 'grey.100' } }} />
-        <PasswordField label="Password" value={form.password} onChange={update('password')} required fullWidth helperText="Min 8 chars, upper, lower, digit, special" InputLabelProps={{ sx: { color: 'grey.400' } }} sx={{ '& .MuiOutlinedInput-root': { color: 'grey.100' }, '& .MuiIconButton-root': { color: 'grey.400' } }} />
-        <PasswordField label="Admin Registration Secret" value={form.adminSecret} onChange={update('adminSecret')} fullWidth helperText="Required when ADMIN_REGISTRATION_SECRET is set on the server" InputLabelProps={{ sx: { color: 'grey.400' } }} sx={{ '& .MuiOutlinedInput-root': { color: 'grey.100' }, '& .MuiIconButton-root': { color: 'grey.400' } }} />
-        <Button type="submit" variant="contained" color="warning" disabled={loading}>
-          Register Platform Admin
+        {error && <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>}
+        {success && <Alert severity="success" sx={{ borderRadius: 2 }}>{success}</Alert>}
+        <TextField label="First Name" value={form.firstName} onChange={update('firstName')} required fullWidth />
+        <TextField label="Last Name" value={form.lastName} onChange={update('lastName')} required fullWidth />
+        <TextField label="Admin Email" type="email" value={form.email} onChange={update('email')} required fullWidth />
+        <PasswordField
+          label="Password"
+          value={form.password}
+          onChange={update('password')}
+          required
+          fullWidth
+          helperText="Min 8 chars, upper, lower, digit, special"
+        />
+        <PasswordField
+          label="Admin Registration Secret"
+          value={form.adminSecret}
+          onChange={update('adminSecret')}
+          fullWidth
+          helperText="Required when ADMIN_REGISTRATION_SECRET is set on the server"
+        />
+        <Button
+          type="submit"
+          variant="contained"
+          size="large"
+          fullWidth
+          disabled={loading}
+          endIcon={!loading ? <ArrowForwardIcon /> : undefined}
+          sx={{ py: 1.25 }}
+        >
+          {loading ? 'Registering…' : 'Register Platform Admin'}
         </Button>
-        <Link component={RouterLink} to={paths.admin.login} variant="body2" textAlign="center" color="warning.light">
+        <Link
+          component={RouterLink}
+          to={paths.admin.login}
+          variant="body2"
+          textAlign="center"
+          underline="hover"
+        >
           Already have an admin account? Sign in
         </Link>
       </Stack>

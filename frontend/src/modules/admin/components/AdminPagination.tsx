@@ -29,11 +29,11 @@ export function AdminPageHeader({ title, subtitle, action }: { title: string; su
   return (
     <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2}>
       <Box>
-        <Typography variant="h4" fontWeight={700} color="text.primary">
+        <Typography variant="h4" fontWeight={800} color="text.primary" sx={{ letterSpacing: '-0.02em' }}>
           {title}
         </Typography>
         {subtitle && (
-          <Typography variant="body2" color="text.secondary" mt={0.5}>
+          <Typography variant="body2" color="text.secondary" mt={0.75} sx={{ maxWidth: 560 }}>
             {subtitle}
           </Typography>
         )}
