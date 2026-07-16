@@ -1,2 +1,4 @@
 datasets/*
 !datasets/.gitkeep
+!datasets/bootstrap/
+!datasets/bootstrap/processed.csv

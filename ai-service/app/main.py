@@ -4,12 +4,15 @@ from fastapi import FastAPI
 
 from app.api.v1 import predict, health, train
 from app.core.config import settings
+from app.ml.bootstrap import ensure_bootstrap_models
 from app.ml.model_registry import model_registry
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     model_registry.load()
+    if settings.bootstrap_model_on_startup:
+        ensure_bootstrap_models(settings.platform_org_id or None)
     yield
 
 

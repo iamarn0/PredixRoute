@@ -12,6 +12,10 @@ function normalizeHeader(header: string): string {
   return header.replace(/\s*\*+\s*$/, '').trim();
 }
 
+function normalizeColumnKey(header: string): string {
+  return normalizeHeader(header).toLowerCase().replace(/[\s_]+/g, '');
+}
+
 function normalizeRow(row: Record<string, unknown>): Record<string, string> {
   const normalized: Record<string, string> = {};
   for (const [key, value] of Object.entries(row)) {
@@ -23,15 +27,48 @@ function normalizeRow(row: Record<string, unknown>): Record<string, string> {
   return normalized;
 }
 
+function buildColumnIndex(row: Record<string, string>): Map<string, string> {
+  const index = new Map<string, string>();
+  for (const [key, value] of Object.entries(row)) {
+    index.set(normalizeColumnKey(key), value);
+  }
+  return index;
+}
+
+function getRowValue(row: Record<string, string>, aliases: string[]): string | undefined {
+  const index = buildColumnIndex(row);
+  for (const alias of aliases) {
+    const value = index.get(normalizeColumnKey(alias));
+    if (value) return value;
+  }
+  return undefined;
+}
+
 function parseBool(value: unknown): boolean {
   const s = String(value).trim().toLowerCase();
   return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'cod';
+}
+
+function parsePaymentType(value: unknown): boolean {
+  const s = String(value).trim().toLowerCase();
+  if (!s) return false;
+  if (s.includes('cod') || s.includes('cash on delivery')) return true;
+  if (s.includes('prepaid') || s.includes('pre-paid') || s.includes('online') || s.includes('upi')) {
+    return false;
+  }
+  return parseBool(value);
 }
 
 function parseNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
   const n = Number(String(value).replace(/,/g, '').trim());
   return Number.isFinite(n) ? n : null;
+}
+
+function normalizePincode(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.slice(-6).padStart(6, '0');
 }
 
 function joinAddress(parts: Array<string | undefined>): string {
@@ -41,25 +78,40 @@ function joinAddress(parts: Array<string | undefined>): string {
 function weightToGrams(value: unknown): number {
   const n = parseNumber(value);
   if (n === null || n <= 0) return 500;
-  // Template uses kg (e.g. 0.5); legacy CSV uses grams.
+  // Template / MIS exports often use kg (e.g. 0.5, 16); legacy CSV uses grams.
   return n < 100 ? Math.round(n * 1000) : Math.round(n);
 }
 
 function sumOrderValue(row: Record<string, string>): number {
   let total = 0;
   for (let i = 1; i <= 4; i += 1) {
-    const price = parseNumber(row[`Item Price${i}`]);
-    const qty = parseNumber(row[`Quantity${i}`]);
+    const price =
+      parseNumber(getRowValue(row, [`Item Price${i}`, `Price${i}`, `item_price${i}`, `price${i}`])) ??
+      null;
+    const qty =
+      parseNumber(getRowValue(row, [`Quantity${i}`, `Qty${i}`, `quantity${i}`, `qty${i}`])) ?? null;
     if (price !== null && qty !== null) total += price * qty;
   }
   if (total > 0) return total;
 
-  const fallback =
-    parseNumber(row.order_value) ??
-    parseNumber(row.order_amount) ??
-    parseNumber(row['COD Amount']) ??
+  const directTotal =
+    parseNumber(
+      getRowValue(row, [
+        'Total _Value',
+        'Total Value',
+        'Total_Value',
+        'Total Amount',
+        'Total_Amount',
+        'order_value',
+        'order_amount',
+        'Invoice Value',
+        'Invoice_Value',
+      ]),
+    ) ??
+    parseNumber(getRowValue(row, ['COD Amount', 'COD_Collectable_Amount', 'cod_amount'])) ??
     0;
-  return fallback ?? 0;
+
+  return Math.max(directTotal ?? 0, 0);
 }
 
 export function parseBulkOrderFile(buffer: Buffer, filename: string): Record<string, string>[] {
@@ -84,31 +136,60 @@ export function isSupportedBulkOrderFile(filename: string): boolean {
 }
 
 export function mapBulkOrderRow(row: Record<string, string>, defaultCouriers: string[]) {
-  const pincode = row['Shipping Pincode'] || row.destination_pincode || row.pincode;
+  const rawPincode = getRowValue(row, [
+    'Shipping Pincode',
+    'Shipping_Pincode',
+    'shipping pincode',
+    'destination_pincode',
+    'pincode',
+  ]);
+  const pincode = rawPincode ? normalizePincode(rawPincode) : '';
+
   const deliveryAddress =
     joinAddress([
-      row['Shipping Address Line1'] || row.delivery_address || row.address || row.full_address,
-      row['Shipping Address Line2'],
-      row['Shipping City'],
-      row['Shipping State'],
+      getRowValue(row, [
+        'Shipping Address Line1',
+        'Shipping_Address_Line1',
+        'Shipping Address Line 1',
+        'delivery_address',
+        'address',
+        'full_address',
+      ]),
+      getRowValue(row, ['Shipping Address Line2', 'Shipping_Address_Line2', 'Shipping Address Line 2']),
+      getRowValue(row, ['Shipping City', 'Shipping_City', 'shipping city']),
+      getRowValue(row, ['Shipping State', 'Shipping_State', 'shipping state']),
     ]) || undefined;
 
   if (!pincode || !deliveryAddress) return null;
 
-  const paymentType = row['Payment Type'] || row.payment_type || '';
-  const cod = paymentType ? parseBool(paymentType) : parseBool(row.cod ?? 'false');
+  const paymentType = getRowValue(row, ['Payment Type', 'Payment_Type', 'payment_type']) ?? '';
+  const cod = paymentType ? parsePaymentType(paymentType) : parseBool(getRowValue(row, ['cod']) ?? 'false');
+
+  const orderValue = sumOrderValue(row);
+  const codAmount = parseNumber(
+    getRowValue(row, ['COD Amount', 'COD_Collectable_Amount', 'COD Collectable Amount', 'cod_amount']),
+  );
 
   return {
-    destinationPincode: pincode.trim(),
+    destinationPincode: pincode,
     deliveryAddress: deliveryAddress.trim(),
-    weightGrams: weightToGrams(row['Package Weight'] || row.weight_grams || row.weight || 500),
+    weightGrams: weightToGrams(
+      getRowValue(row, [
+        'Package Weight',
+        'Package_Weight_Kg',
+        'Package Weight Kg',
+        'Package_Weight',
+        'weight_grams',
+        'weight',
+      ]) ?? '500',
+    ),
     cod,
-    codAmount: parseNumber(row['COD Amount'] ?? row.cod_amount),
-    orderValue: sumOrderValue(row),
+    codAmount: cod ? codAmount : null,
+    orderValue: orderValue > 0 ? orderValue : cod && codAmount && codAmount > 0 ? codAmount : 1,
     availableCouriers: defaultCouriers,
-    externalRef: row['Order Id'] || row.external_ref || row.order_id || undefined,
-    customerPhone: row['Phone Number'] || row.customer_phone || undefined,
-    customerName: row['Customer Name'] || row.customer_name || undefined,
-    productName: row['Product Name1'] || row.product_name || undefined,
+    externalRef: getRowValue(row, ['Order Id', 'Order_Id', 'external_ref', 'order_id']),
+    customerPhone: getRowValue(row, ['Phone Number', 'Phone_Number', 'customer_phone']),
+    customerName: getRowValue(row, ['Customer Name', 'Customer_Name', 'customer_name']),
+    productName: getRowValue(row, ['Product Name1', 'Product_Name1', 'product_name']),
   };
 }

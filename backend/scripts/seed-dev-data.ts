@@ -7,6 +7,7 @@ import path from 'path';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import axios from 'axios';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -292,6 +293,35 @@ async function seed() {
   console.log('Customer login: admin@demo-logistics.com / Demo@123456  →  /customer/auth/login');
   console.log('Platform admin: superadmin@predixroute.com / Demo@123456  →  /admin/auth/login');
   console.log('API Key:', apiKey);
+
+  if (platformOrg) {
+    const aiServiceUrl = process.env.AI_SERVICE_URL ?? 'http://localhost:8000';
+    const aiToken = process.env.AI_SERVICE_INTERNAL_TOKEN ?? 'dev_internal_token_min_16';
+    try {
+      const { data } = await axios.post(
+        `${aiServiceUrl}/internal/v1/train`,
+        {
+          organization_id: platformOrg._id.toString(),
+          dataset_relative_path: 'bootstrap/processed.csv',
+        },
+        {
+          headers: {
+            'X-Internal-Token': aiToken,
+            'Content-Type': 'application/json',
+          },
+          timeout: 120000,
+        },
+      );
+      console.log(
+        `Trained platform ML model (accuracy=${data.data?.accuracy}, samples=${data.data?.sample_count})`,
+      );
+    } catch (err) {
+      console.warn(
+        'Could not train platform ML model — ensure ai-service is running and bootstrap/processed.csv exists.',
+      );
+      console.warn(String(err));
+    }
+  }
 
   await mongoose.disconnect();
 }

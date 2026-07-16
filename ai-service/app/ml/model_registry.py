@@ -32,6 +32,7 @@ FEATURE_COLUMNS = [
 ]
 
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
+GLOBAL_ORG_ID = "global"
 
 
 def org_model_path(organization_id: str) -> Path:
@@ -58,18 +59,26 @@ class ModelRegistry:
         self._org_cache.pop(organization_id, None)
         self.get_org_model(organization_id)
 
-    def get_org_model(self, organization_id: str) -> LoadedModel | None:
-        if organization_id in self._org_cache:
-            return self._org_cache[organization_id]
-
-        path = org_model_path(organization_id)
+    def _load_from_path(self, organization_id: str, path: Path) -> LoadedModel | None:
         if not path.exists():
             return None
-
         artifact = joblib.load(path)
         loaded = LoadedModel(artifact)
         self._org_cache[organization_id] = loaded
         return loaded
+
+    def get_org_model(self, organization_id: str) -> LoadedModel | None:
+        if organization_id in self._org_cache:
+            return self._org_cache[organization_id]
+
+        loaded = self._load_from_path(organization_id, org_model_path(organization_id))
+        if loaded:
+            return loaded
+
+        if organization_id != GLOBAL_ORG_ID:
+            return self.get_org_model(GLOBAL_ORG_ID)
+
+        return None
 
     @property
     def is_loaded(self) -> bool:
@@ -83,10 +92,13 @@ class ModelRegistry:
     def feature_vector(self, features: dict[str, float]) -> np.ndarray:
         return np.array([[features[col] for col in FEATURE_COLUMNS]], dtype=np.float32)
 
-    def predict_delivery_probability(self, organization_id: str, features: dict[str, float]) -> tuple[float, str] | None:
+    def predict_delivery_probability(self, organization_id: str, features: dict[str, float]) -> tuple[float, str]:
         loaded = self.get_org_model(organization_id)
         if not loaded:
-            return None
+            raise RuntimeError(
+                f"No ML model available for organization {organization_id}. "
+                "Train a model via admin console or run bootstrap training."
+            )
         proba = float(loaded.model.predict_proba(self.feature_vector(features))[0][1])
         return round(max(0.01, min(0.99, proba)), 4), loaded.model_id
 

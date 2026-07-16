@@ -134,7 +134,13 @@ export class BulkPredictionService {
             model_version: response.modelVersion,
           });
         } catch (err) {
-          outputRows.push({ ...row, error: String(err) });
+          const message =
+            err instanceof ApiError
+              ? `${err.code}: ${err.message}`
+              : err instanceof Error
+                ? err.message
+                : String(err);
+          outputRows.push({ ...row, error: message });
         }
 
         processed += 1;

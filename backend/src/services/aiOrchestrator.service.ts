@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, isAxiosError } from 'axios';
 import { config } from '../config';
 import {
   AiPredictionResponse,
@@ -56,6 +56,19 @@ function mapAiResponse(raw: RawAiResponse): AiPredictionResponse {
     modelId: raw.model_id ?? raw.modelId ?? 'mdl_default',
     modelVersion: raw.model_version ?? raw.modelVersion ?? '1.0.0',
   };
+}
+
+function formatAiValidationError(detail: unknown): string {
+  if (!Array.isArray(detail)) return 'Invalid prediction input';
+  return detail
+    .map((item) => {
+      if (item && typeof item === 'object' && 'msg' in item) {
+        const loc = 'loc' in item && Array.isArray(item.loc) ? item.loc.join('.') : 'input';
+        return `${loc}: ${String(item.msg)}`;
+      }
+      return String(item);
+    })
+    .join('; ');
 }
 
 export class AiOrchestratorService {
@@ -142,7 +155,25 @@ export class AiOrchestratorService {
       );
       return mapAiResponse(data.data);
     } catch (err) {
-      logger.error(`AI service predictRisk failed for org ${organizationId}: ${String(err)}`);
+      if (isAxiosError(err) && err.response) {
+        const status = err.response.status;
+        const detail = err.response.data?.detail;
+        logger.error(
+          `AI service predictRisk failed for org ${organizationId}: ${status} ${JSON.stringify(detail)}`,
+        );
+        if (status === 422) {
+          throw ApiError.badRequest('AI_VALIDATION_FAILED', formatAiValidationError(detail));
+        }
+        if (status === 503) {
+          throw new ApiError(
+            503,
+            'AI_SERVICE_UNAVAILABLE',
+            typeof detail === 'string' ? detail : 'AI prediction service is temporarily unavailable',
+          );
+        }
+      } else {
+        logger.error(`AI service predictRisk failed for org ${organizationId}: ${String(err)}`);
+      }
       throw new ApiError(503, 'AI_SERVICE_UNAVAILABLE', 'AI prediction service is temporarily unavailable');
     }
   }
